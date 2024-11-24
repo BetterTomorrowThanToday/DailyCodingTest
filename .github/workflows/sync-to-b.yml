@@ -5,7 +5,7 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
-  workflow_dispatch:  # 이 라인을 추가하여 수동 실행이 가능하도록 설정합니다.
+  workflow_dispatch:  # 수동 실행을 위한 설정
 
 jobs:
   sync-to-b:
@@ -26,16 +26,37 @@ jobs:
       - name: Determine current year, month, and week of the month
         id: date
         run: |
-          TODAY=$(date +"%Y-%m-%d")
+          TODAY="2024-11-24"  # 기준일 설정
           YEAR=$(date -d "$TODAY" +"%Y")
           MONTH=$(date -d "$TODAY" +"%m")
           DAY=$(date -d "$TODAY" +"%d")
-          START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u - 1) days" +"%Y-%m-%d")
-          START_OF_WEEK_DAY=$(date -d "$START_OF_WEEK" +"%d")
-          WEEK_NUMBER=$(((DAY - START_OF_WEEK_DAY) / 7 + 1))
-          if [ "$DAY" -gt "$START_OF_WEEK_DAY" ]; then
-            WEEK_NUMBER=$((WEEK_NUMBER + 1))
+          
+          # 해당 월의 1일을 기준으로 주차 계산
+          FIRST_OF_MONTH="${YEAR}-${MONTH}-01"
+          FIRST_DAY_OF_WEEK=$(date -d "$FIRST_OF_MONTH" +%u)  # 1일이 무슨 요일인지 구하기 (1=월요일, 7=일요일)
+
+          # 1일이 포함된 주의 시작일 (일요일로 설정)
+          if [ "$FIRST_DAY_OF_WEEK" -eq 1 ]; then
+            START_OF_WEEK="${FIRST_OF_MONTH}"
+          else
+            START_OF_WEEK=$(date -d "$FIRST_OF_MONTH - $((FIRST_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
           fi
+
+          # 오늘 날짜부터 해당 월의 1일까지 차이 일수를 계산
+          DAYS_SINCE_START_OF_MONTH=$(( ( $(date -d "$TODAY" +%s) - $(date -d "$START_OF_WEEK" +%s) ) / 86400 ))
+
+          # 주차 계산 (일요일부터 토요일까지 한 주 기준)
+          WEEK_NUMBER=$(( (DAYS_SINCE_START_OF_MONTH) / 7 + 1 ))
+
+          # 해당 월의 마지막 날이 토요일이 아니면, 그 다음날은 Week 1로 설정
+          END_OF_MONTH=$(date -d "$YEAR-$MONTH-01 +1 month -1 day" +"%Y-%m-%d")  # 해당 월의 마지막 날
+          END_OF_MONTH_DAY=$(date -d "$END_OF_MONTH" +"%u")  # 마지막 날이 무슨 요일인지 확인
+
+          # 마지막 날이 토요일이 아니면, 그 다음 날은 새로운 월의 첫 번째 주로 설정
+          if [ "$END_OF_MONTH_DAY" -ne 6 ]; then
+            WEEK_NUMBER=$((WEEK_NUMBER + 1))  # 새로운 월의 첫 번째 주로 설정
+          fi
+
           DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
           echo "::set-output name=dir_name::${DIR_NAME}"
 
@@ -79,23 +100,6 @@ jobs:
             git pull origin main
           fi
 
-#      # Step 5: Clone B repo and handle empty repo case
-#      - name: Clone B repository
-#        run: |
-#          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
-#          cd b_repo
-#
-#          # Check if the repository is empty (no commits)
-#          if [ -z "$(git log --oneline)" ]; then
-#            echo "B repository is empty, creating an initial commit"
-#            # Initialize the repository with an initial commit if it's empty
-#            git commit --allow-empty -m "Initial commit"
-#            git push origin main
-#          else
-#            git pull origin main
-#          fi
-
-
       # Step 6: Copy prepared files to B repository
       - name: Copy prepared files to B repository
         run: |
@@ -110,30 +114,12 @@ jobs:
           # Clean up temp directory
           rm -rf temp_b_repo
 
-#      # Step 7: Commit and push to B repository with A repo's last commit message
-#      - name: Commit and push to B repository with A repo's commit messages
-#        run: |
-#          cd b_repo
-#          git add .
-#          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
-#
-#          # Commit with the last commit message from A repo
-#          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
-#          git push origin main
       # Step 7: Commit and push to B repository with A repo's last commit message
       - name: Commit and push to B repository with A repo's commit messages
         run: |
           cd b_repo
-          
-          # Print the LAST_COMMIT_MSG for debugging
-          echo "Last commit message: $LAST_COMMIT_MSG"
-          
           git add .
-          # Ensure LAST_COMMIT_MSG is not empty or undefined
-          if [ -z "$LAST_COMMIT_MSG" ]; then
-            echo "LAST_COMMIT_MSG is empty, using default message"
-            LAST_COMMIT_MSG="Sync changes from A repository"
-          fi
+          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
           
           # Commit with the last commit message from A repo
           git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
