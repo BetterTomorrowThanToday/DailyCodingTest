@@ -5,7 +5,7 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
-  workflow_dispatch:  # 수동 실행을 위한 설정
+  workflow_dispatch:  # 수동 실행이 가능하도록 설정
 
 jobs:
   sync-to-b:
@@ -118,8 +118,16 @@ jobs:
       - name: Commit and push to B repository with A repo's commit messages
         run: |
           cd b_repo
+          
+          # Print the LAST_COMMIT_MSG for debugging
+          echo "Last commit message: $LAST_COMMIT_MSG"
+          
           git add .
-          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
+          # Ensure LAST_COMMIT_MSG is not empty or undefined
+          if [ -z "$LAST_COMMIT_MSG" ]; then
+            echo "LAST_COMMIT_MSG is empty, using default message"
+            LAST_COMMIT_MSG="Sync changes from A repository"
+          fi
           
           # Commit with the last commit message from A repo
           git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
