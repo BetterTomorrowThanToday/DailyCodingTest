@@ -5,6 +5,7 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
+      - '백준/Bronze/**'
   workflow_dispatch:  # 수동 실행이 가능하도록 설정
 
 jobs:
@@ -22,69 +23,71 @@ jobs:
           git config --global user.name "Hiki's GitHub Actions Bot"
           git config --global user.email "wsx0239@gmail.com"
 
-      # Step 3: Calculate current year, month, and week (기존 로직 유지)
-      - name: Determine current year, month, and week of the month
-        id: date
-        run: |
-          TODAY="2024-11-24"  # 기준일 설정
-          YEAR=$(date -d "$TODAY" +"%Y")
-          MONTH=$(date -d "$TODAY" +"%m")
-          DAY=$(date -d "$TODAY" +"%d")
-          
-          # 해당 월의 1일을 기준으로 주차 계산
-          FIRST_OF_MONTH="${YEAR}-${MONTH}-01"
-          FIRST_DAY_OF_WEEK=$(date -d "$FIRST_OF_MONTH" +%u)  # 1일이 무슨 요일인지 구하기 (1=월요일, 7=일요일)
-
-          # 1일이 포함된 주의 시작일 (일요일로 설정)
-          if [ "$FIRST_DAY_OF_WEEK" -eq 1 ]; then
-            START_OF_WEEK="${FIRST_OF_MONTH}"
-          else
-            START_OF_WEEK=$(date -d "$FIRST_OF_MONTH - $((FIRST_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
-          fi
-
-          # 오늘 날짜부터 해당 월의 1일까지 차이 일수를 계산
-          DAYS_SINCE_START_OF_MONTH=$(( ( $(date -d "$TODAY" +%s) - $(date -d "$START_OF_WEEK" +%s) ) / 86400 ))
-
-          # 주차 계산 (일요일부터 토요일까지 한 주 기준)
-          WEEK_NUMBER=$(( (DAYS_SINCE_START_OF_MONTH) / 7 + 1 ))
-
-          # 해당 월의 마지막 날이 토요일이 아니면, 그 다음날은 Week 1로 설정
-          END_OF_MONTH=$(date -d "$YEAR-$MONTH-01 +1 month -1 day" +"%Y-%m-%d")  # 해당 월의 마지막 날
-          END_OF_MONTH_DAY=$(date -d "$END_OF_MONTH" +"%u")  # 마지막 날이 무슨 요일인지 확인
-
-          # 마지막 날이 토요일이 아니면, 그 다음 날은 새로운 월의 첫 번째 주로 설정
-          if [ "$END_OF_MONTH_DAY" -ne 6 ]; then
-            WEEK_NUMBER=$((WEEK_NUMBER + 1))  # 새로운 월의 첫 번째 주로 설정
-          fi
-
-          DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
-          echo "::set-output name=dir_name::${DIR_NAME}"
-
-      # Step 4: Prepare files for B repository
+      # Step 3: Prepare files for B repository
       - name: Prepare files for B repository
         run: |
-          DIR_NAME=${{ steps.date.outputs.dir_name }}
-          mkdir -p temp_b_repo/${DIR_NAME}
+          mkdir -p temp_b_repo
           
-          # Copy Silver and Gold directories (문제 번호.문제 이름) into the appropriate folder
-          for level in Silver Gold; do
+          # Iterate over Silver, Gold, and Bronze directories
+          for level in Bronze Silver Gold; do
             if [ -d 백준/$level ]; then
+              # Iterate over all problem directories
               for problem_dir in 백준/$level/*/; do
                 problem_name=$(basename "$problem_dir")
-                mkdir -p temp_b_repo/${DIR_NAME}/$problem_name
-                cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/$problem_name/
           
-                # Get the last commit message for the problem directory
+                # Get the commit date for the problem directory or any file inside it
+                COMMIT_DATE=$(git log -1 --format=%ci -- "$problem_dir")
+                COMMIT_YEAR=$(date -d "$COMMIT_DATE" +"%Y")
+                COMMIT_MONTH=$(date -d "$COMMIT_DATE" +"%m")
+                COMMIT_DAY=$(date -d "$COMMIT_DATE" +"%d")
+          
+                # Calculate the week number based on commit date
+                COMMIT_DAY_OF_WEEK=$(date -d "$COMMIT_DATE" +%u)  # Get the day of the week (1=Monday, 7=Sunday)
+                COMMIT_START_OF_WEEK=$(date -d "$COMMIT_DATE -$((COMMIT_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
+                DAYS_SINCE_COMMIT_START=$(( ( $(date -d "$COMMIT_DATE" +%s) - $(date -d "$COMMIT_START_OF_WEEK" +%s) ) / 86400 ))
+                WEEK_NUMBER=$(( (DAYS_SINCE_COMMIT_START) / 7 + 1 ))
+
+                # Create the directory based on commit date and week
+                DIR_NAME="${COMMIT_YEAR}-${COMMIT_MONTH}/Week${WEEK_NUMBER}"
+                mkdir -p temp_b_repo/${DIR_NAME}/${problem_name}
+          
+                # Copy the problem files to the respective directory
+                cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/${problem_name}/
+          
+                # Handle each file's commit message (get the last commit message)
                 LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
                 echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
-
+          
                 # Store the commit message to be used later
                 echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
+
+                # Now, handle the files inside the problem directory (e.g., *.java files)
+                for file in "$problem_dir"*.java; do
+                  if [ -f "$file" ]; then
+                    FILE_COMMIT_DATE=$(git log -1 --format=%ci -- "$file")
+                    FILE_COMMIT_YEAR=$(date -d "$FILE_COMMIT_DATE" +"%Y")
+                    FILE_COMMIT_MONTH=$(date -d "$FILE_COMMIT_DATE" +"%m")
+                    FILE_COMMIT_DAY=$(date -d "$FILE_COMMIT_DATE" +"%d")
+          
+                    # Calculate the week number based on commit date of the file
+                    FILE_COMMIT_DAY_OF_WEEK=$(date -d "$FILE_COMMIT_DATE" +%u)  # Get the day of the week (1=Monday, 7=Sunday)
+                    FILE_COMMIT_START_OF_WEEK=$(date -d "$FILE_COMMIT_DATE -$((FILE_COMMIT_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
+                    FILE_DAYS_SINCE_COMMIT_START=$(( ( $(date -d "$FILE_COMMIT_DATE" +%s) - $(date -d "$FILE_COMMIT_START_OF_WEEK" +%s) ) / 86400 ))
+                    FILE_WEEK_NUMBER=$(( (FILE_DAYS_SINCE_COMMIT_START) / 7 + 1 ))
+
+                    # Create the directory based on file commit date and week
+                    FILE_DIR_NAME="${FILE_COMMIT_YEAR}-${FILE_COMMIT_MONTH}/Week${FILE_WEEK_NUMBER}"
+                    mkdir -p temp_b_repo/${FILE_DIR_NAME}/$(basename "$file")
+          
+                    # Copy the file to the respective directory
+                    cp "$file" temp_b_repo/${FILE_DIR_NAME}/$(basename "$file")
+                  fi
+                done
               done
             fi
           done
 
-      # Step 5: Clone B repo and handle empty repo case
+      # Step 4: Clone B repo and handle empty repo case
       - name: Clone B repository
         run: |
           git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
@@ -100,21 +103,16 @@ jobs:
             git pull origin main
           fi
 
-      # Step 6: Copy prepared files to B repository (각 파일의 커밋 날짜에 맞는 디렉토리로 복사)
+      # Step 5: Copy prepared files to B repository
       - name: Copy prepared files to B repository
         run: |
-          DIR_NAME=${{ steps.date.outputs.dir_name }}
-          
-          # Ensure the target directory exists before copying files
-          mkdir -p b_repo/${DIR_NAME}  # Add this line to create the target directory
-          
           # Copy the files from temp_b_repo directly to the target folder in b_repo
-          cp -r temp_b_repo/${DIR_NAME}/* b_repo/${DIR_NAME}/
+          cp -r temp_b_repo/* b_repo/
           
           # Clean up temp directory
           rm -rf temp_b_repo
 
-      # Step 7: Commit and push to B repository with A repo's last commit message
+      # Step 6: Commit and push to B repository with A repo's last commit message
       - name: Commit and push to B repository with A repo's commit messages
         run: |
           cd b_repo
