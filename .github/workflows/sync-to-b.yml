@@ -22,7 +22,7 @@ jobs:
           git config --global user.name "Hiki's GitHub Actions Bot"
           git config --global user.email "wsx0239@gmail.com"
 
-      # Step 3: Calculate current year, month, and week
+      # Step 3: Calculate current year, month, and week (기존 로직 유지)
       - name: Determine current year, month, and week of the month
         id: date
         run: |
@@ -100,7 +100,7 @@ jobs:
             git pull origin main
           fi
 
-      # Step 6: Copy prepared files to B repository
+      # Step 6: Copy prepared files to B repository (각 파일의 커밋 날짜에 맞는 디렉토리로 복사)
       - name: Copy prepared files to B repository
         run: |
           DIR_NAME=${{ steps.date.outputs.dir_name }}
