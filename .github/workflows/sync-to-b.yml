@@ -42,32 +42,53 @@ jobs:
           
                 # Calculate the first day of the month
                 FIRST_OF_MONTH="${COMMIT_YEAR}-${COMMIT_MONTH}-01"
-                FIRST_DAY_OF_WEEK=$(date -d "$FIRST_OF_MONTH" +%u) # Day of the week (1=Monday, 7=Sunday)
-
-                # Determine the start of the first week (Sunday)
-                if [ "$FIRST_DAY_OF_WEEK" -eq 7 ]; then
-                  START_OF_WEEK="$FIRST_OF_MONTH"
-                else
-                  START_OF_WEEK=$(date -d "$FIRST_OF_MONTH -$FIRST_DAY_OF_WEEK days" +"%Y-%m-%d")
-                fi
-
-                # Calculate the number of days since the start of the first week
-                DAYS_SINCE_START=$(( ( $(date -d "$COMMIT_DATE" +%s) - $(date -d "$START_OF_WEEK" +%s) ) / 86400 ))
-                WEEK_NUMBER=$((DAYS_SINCE_START / 7 + 1))
-
-                # Create the directory based on commit date and week
-                DIR_NAME="${COMMIT_YEAR}-${COMMIT_MONTH}/Week${WEEK_NUMBER}"
-                mkdir -p temp_b_repo/${DIR_NAME}/${problem_name}
+                LAST_OF_MONTH=$(date -d "$FIRST_OF_MONTH +1 month -1 day" +"%Y-%m-%d")
           
-                # Copy the problem directory to the appropriate location
-                cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/${problem_name}/
+                # Iterate through weeks of the month
+                WEEK_START=$FIRST_OF_MONTH
+                WEEK_NUMBER=1
+                while [ $(date -d "$WEEK_START" +%Y-%m-%d) \< $LAST_OF_MONTH ]; do
+                  WEEK_END=$(date -d "$WEEK_START +6 days" +%Y-%m-%d)
           
-                # Handle the last commit message for the problem directory
-                LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
-                echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
+                  # Adjust the week range to fit within the current month
+                  ACTUAL_START=$(date -d "$WEEK_START" +%Y-%m-%d)
+                  ACTUAL_END=$(date -d "$WEEK_END" +%Y-%m-%d)
+                  if [ $(date -d "$ACTUAL_END" +%Y-%m-%d) \> $LAST_OF_MONTH ]; then
+                    ACTUAL_END=$LAST_OF_MONTH
+                  fi
           
-                # Store the commit message to be used later
-                echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
+                  # Count how many days in this week belong to the current month
+                  DAYS_IN_MONTH=0
+                  for DAY in $(seq 0 6); do
+                    CURRENT_DAY=$(date -d "$WEEK_START +$DAY days" +%Y-%m-%d)
+                    CURRENT_MONTH=$(date -d "$CURRENT_DAY" +%m)
+          
+                    if [ "$CURRENT_MONTH" -eq "$COMMIT_MONTH" ]; then
+                      DAYS_IN_MONTH=$((DAYS_IN_MONTH + 1))
+                    fi
+                  done
+          
+                  # Check if this week belongs to the month (4 days or more in the month)
+                  if [ "$DAYS_IN_MONTH" -ge 4 ]; then
+                    DIR_NAME="${COMMIT_YEAR}-${COMMIT_MONTH}/Week${WEEK_NUMBER}"
+                    mkdir -p temp_b_repo/${DIR_NAME}/${problem_name}
+          
+                    # Copy the problem directory to the appropriate location
+                    cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/${problem_name}/
+          
+                    # Handle the last commit message for the problem directory
+                    LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
+                    echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
+          
+                    # Store the commit message to be used later
+                    echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
+                    break
+                  fi
+          
+                  # Move to the next week
+                  WEEK_START=$(date -d "$WEEK_START +7 days" +%Y-%m-%d)
+                  WEEK_NUMBER=$((WEEK_NUMBER + 1))
+                done
               done
             fi
           done
@@ -88,30 +109,30 @@ jobs:
             git pull origin main
           fi
 
-      # Step 5: Copy prepared files to B repository
-      - name: Copy prepared files to B repository
-        run: |
-          # Copy the files from temp_b_repo directly to the target folder in b_repo
-          cp -r temp_b_repo/* b_repo/
-          
-          # Clean up temp directory
-          rm -rf temp_b_repo
-
-      # Step 6: Commit and push to B repository with A repo's last commit message
-      - name: Commit and push to B repository with A repo's commit messages
+      # Step 5: Copy prepared files to B repository and commit each file with its own commit message
+      - name: Commit each file with its own commit message
         run: |
           cd b_repo
           
-          # Print the LAST_COMMIT_MSG for debugging
-          echo "Last commit message: $LAST_COMMIT_MSG"
+          # Loop through all the directories in the temp_b_repo and commit each file separately
+          for problem_dir in temp_b_repo/*/*/*/; do
+            problem_name=$(basename "$problem_dir")
           
-          git add .
-          # Ensure LAST_COMMIT_MSG is not empty or undefined
-          if [ -z "$LAST_COMMIT_MSG" ]; then
-            echo "LAST_COMMIT_MSG is empty, using default message"
-            LAST_COMMIT_MSG="Sync changes from A repository"
-          fi
+            # Get the commit message for the problem directory from the environment variable
+            COMMIT_MSG=$(grep "LAST_COMMIT_MSG" $GITHUB_ENV | grep "$problem_name" | sed 's/LAST_COMMIT_MSG=//')
           
-          # Commit with the last commit message from A repo
-          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
-          git push origin main
+            # Ensure the commit message is not empty
+            if [ -z "$COMMIT_MSG" ]; then
+              COMMIT_MSG="Sync changes from A repository"
+            fi
+          
+            # Add the file to git and commit with the specific message
+            git add "$problem_dir"
+            git commit -m "$COMMIT_MSG"
+            git push origin main
+          done
+
+      # Step 6: Clean up temporary directory
+      - name: Clean up temp directory
+        run: |
+          rm -rf temp_b_repo
