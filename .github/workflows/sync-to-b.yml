@@ -5,7 +5,6 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
-      - '백준/Bronze/**'
   workflow_dispatch:  # 수동 실행이 가능하도록 설정
 
 jobs:
@@ -28,8 +27,8 @@ jobs:
         run: |
           mkdir -p temp_b_repo
           
-          # Iterate over Silver, Gold, and Bronze directories
-          for level in Bronze Silver Gold; do
+          # Iterate over Silver, Gold directories
+          for level in Silver Gold; do
             if [ -d 백준/$level ]; then
               # Iterate over all problem directories
               for problem_dir in 백준/$level/*/; do
@@ -39,12 +38,22 @@ jobs:
                 COMMIT_DATE=$(git log -1 --format=%ci -- "$problem_dir")
                 COMMIT_YEAR=$(date -d "$COMMIT_DATE" +"%Y")
                 COMMIT_MONTH=$(date -d "$COMMIT_DATE" +"%m")
+                COMMIT_DAY=$(date -d "$COMMIT_DATE" +"%d")
           
-                # Calculate the week number based on commit date
-                COMMIT_DAY_OF_WEEK=$(date -d "$COMMIT_DATE" +%u)  # Get the day of the week (1=Monday, 7=Sunday)
-                COMMIT_START_OF_WEEK=$(date -d "$COMMIT_DATE -$((COMMIT_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
-                DAYS_SINCE_COMMIT_START=$(( ( $(date -d "$COMMIT_DATE" +%s) - $(date -d "$COMMIT_START_OF_WEEK" +%s) ) / 86400 ))
-                WEEK_NUMBER=$(( (DAYS_SINCE_COMMIT_START) / 7 + 1 ))
+                # Calculate the first day of the month
+                FIRST_OF_MONTH="${COMMIT_YEAR}-${COMMIT_MONTH}-01"
+                FIRST_DAY_OF_WEEK=$(date -d "$FIRST_OF_MONTH" +%u) # Day of the week (1=Monday, 7=Sunday)
+
+                # Determine the start of the first week (Sunday)
+                if [ "$FIRST_DAY_OF_WEEK" -eq 7 ]; then
+                  START_OF_WEEK="$FIRST_OF_MONTH"
+                else
+                  START_OF_WEEK=$(date -d "$FIRST_OF_MONTH -$FIRST_DAY_OF_WEEK days" +"%Y-%m-%d")
+                fi
+
+                # Calculate the number of days since the start of the first week
+                DAYS_SINCE_START=$(( ( $(date -d "$COMMIT_DATE" +%s) - $(date -d "$START_OF_WEEK" +%s) ) / 86400 ))
+                WEEK_NUMBER=$((DAYS_SINCE_START / 7 + 1))
 
                 # Create the directory based on commit date and week
                 DIR_NAME="${COMMIT_YEAR}-${COMMIT_MONTH}/Week${WEEK_NUMBER}"
