@@ -109,13 +109,18 @@ jobs:
             git pull origin main
           fi
 
-      # Step 5: Copy prepared files to B repository and commit each file with its own commit message
+      # Step 5: Commit each file with its own commit message
       - name: Commit each file with its own commit message
         run: |
           cd b_repo
           
+          # Output the directory structure of temp_b_repo to check its contents
+          echo "Directory structure of temp_b_repo:"
+          ls -R temp_b_repo
+
           # Loop through all the directories in the temp_b_repo and commit each file separately
           for problem_dir in temp_b_repo/*/*/*/; do
+            echo "Processing directory: $problem_dir"
             problem_name=$(basename "$problem_dir")
           
             # Get the commit message for the problem directory from the environment variable
@@ -131,6 +136,29 @@ jobs:
             git commit -m "$COMMIT_MSG"
             git push origin main
           done
+#      # Step 5: Copy prepared files to B repository and commit each file with its own commit message
+#      - name: Commit each file with its own commit message
+#        run: |
+#          cd b_repo
+#
+#          # Loop through all the directories in the temp_b_repo and commit each file separately
+#          for problem_dir in temp_b_repo/*/*/*/; do
+#            problem_name=$(basename "$problem_dir")
+#
+#            # Get the commit message for the problem directory from the environment variable
+#            COMMIT_MSG=$(grep "LAST_COMMIT_MSG" $GITHUB_ENV | grep "$problem_name" | sed 's/LAST_COMMIT_MSG=//')
+#
+#            # Ensure the commit message is not empty
+#            if [ -z "$COMMIT_MSG" ]; then
+#              COMMIT_MSG="Sync changes from A repository"
+#            fi
+#
+#            # Add the file to git and commit with the specific message
+#            git add "$problem_dir"
+#            git commit -m "$COMMIT_MSG"
+#            git push origin main
+#          done
+
 
       # Step 6: Clean up temporary directory
       - name: Clean up temp directory
