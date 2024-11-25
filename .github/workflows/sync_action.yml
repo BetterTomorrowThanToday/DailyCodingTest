@@ -91,7 +91,7 @@ jobs:
             mkdir b_repo
             cd b_repo
             git init
-            git remote add origin https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2
+            git remote add origin https://${{ secrets.TOKEN }}@github.com/WeGoEver/Heechan_Algo.git
             echo "# Algorithm Study Archive" > README.md
             git add README.md
             git commit -m "Initial commit"
