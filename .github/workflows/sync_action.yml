@@ -1,0 +1,148 @@
+name: Sync personal repo to Organization repo
+
+on:
+  push:
+    paths:
+      - '백준/Silver/**'
+      - '백준/Gold/**'
+  workflow_dispatch:
+
+jobs:
+  sync-to-b:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout A repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # 전체 커밋 히스토리를 가져오기 위해 필요
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "Hiki's GitHub Actions Bot"
+          git config --global user.email "wsx0239@gmail.com"
+
+      - name: Process and Sync Problems by Commit Date
+        run: |
+          # 커밋 메시지를 저장할 파일 생성
+          echo "{}" > commit_messages.json
+
+          # Silver와 Gold 폴더의 모든 문제 폴더 처리
+          for PROBLEM_DIR in 백준/Silver/* 백준/Gold/*; do
+            if [ -d "$PROBLEM_DIR" ]; then
+              PROBLEM_NAME=$(basename "$PROBLEM_DIR")
+              echo "Processing: $PROBLEM_NAME"
+
+              # 해당 폴더의 커밋 날짜와 메시지 가져오기
+              COMMIT_INFO=$(git log -1 --format="%ad|%H|%s" --date=short -- "$PROBLEM_DIR")
+              COMMIT_DATE=$(echo "$COMMIT_INFO" | cut -d'|' -f1)
+              COMMIT_HASH=$(echo "$COMMIT_INFO" | cut -d'|' -f2)
+              COMMIT_MSG=$(echo "$COMMIT_INFO" | cut -d'|' -f3)
+          
+              if [ -z "$COMMIT_DATE" ]; then
+                echo "No commit date found for $PROBLEM_DIR, skipping..."
+                continue
+              fi
+          
+              echo "Commit date: $COMMIT_DATE"
+              echo "Commit message: $COMMIT_MSG"
+          
+              # 연도와 월 추출
+              YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)
+              MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)
+          
+              # 해당 월의 첫 날 요일 계산 (1=월요일, 7=일요일)
+              FIRST_DAY="${YEAR}-${MONTH}-01"
+              FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY" +"%u")
+          
+              # 주차 계산
+              if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
+                BASE_WEEK=1
+              else
+                BASE_WEEK=0
+              fi
+          
+              # 해당 날짜의 주차 계산
+              DAY_OF_MONTH=$(date -d "$COMMIT_DATE" +%d)
+              ADJUSTED_DAY=$((DAY_OF_MONTH - 1))
+              WEEK_NUMBER=$(( (ADJUSTED_DAY + FIRST_DAY_WEEKDAY - 1) / 7 + BASE_WEEK ))
+          
+              # B 레포지토리의 대상 경로 생성
+              TARGET_DIR="temp_b_repo/${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
+              TARGET_PATH="${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
+              echo "Target directory: $TARGET_DIR"
+          
+              # 디렉토리 생성 및 파일 복사
+              mkdir -p "$TARGET_DIR"
+              cp -r "$PROBLEM_DIR"/* "$TARGET_DIR"/
+          
+              # 커밋 메시지를 JSON 파일에 추가
+              jq --arg path "$TARGET_PATH" --arg msg "$COMMIT_MSG" \
+                '. + {($path): $msg}' commit_messages.json > commit_messages.tmp && \
+                mv commit_messages.tmp commit_messages.json
+            fi
+          done
+
+      - name: Clone and set up B repository
+        run: |
+          # B 레포지토리 클론
+          git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo || {
+            # 클론 실패 시 새 레포지토리 초기화
+            mkdir b_repo
+            cd b_repo
+            git init
+            git remote add origin https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2
+            echo "# Algorithm Study Archive" > README.md
+            git add README.md
+            git commit -m "Initial commit"
+            git branch -M main
+            git push -u origin main
+            cd ..
+          }
+
+      - name: Sync files to B repository
+        run: |
+          if [ -d "temp_b_repo" ]; then
+            # temp_b_repo의 내용을 B 레포지토리로 복사
+            cp -r temp_b_repo/* b_repo/
+            cd b_repo
+          
+            # Git 설정
+            git config --global core.quotepath false
+            git config --global core.precomposeunicode true
+          
+            # 변경된 파일들 커밋
+            git add .
+          
+            # 각 문제 폴더별로 개별 커밋
+            while IFS= read -r file; do
+              if [[ "$file" == *"Week"* ]]; then
+                dir_path=$(dirname "$file")
+                problem_path="${dir_path#*/}"
+          
+                # commit_messages.json에서 해당 경로의 커밋 메시지 가져오기
+                commit_msg=$(jq -r --arg path "$problem_path" '.[$path]' ../commit_messages.json)
+          
+                if [ "$commit_msg" != "null" ] && [ -n "$commit_msg" ]; then
+                  echo "Committing changes for: $problem_path"
+                  git add "$file"
+                  git commit -m "$commit_msg" || true
+                else
+                  echo "Using default commit message for: $problem_path"
+                  git add "$file"
+                  git commit -m "Add: $problem_path" || true
+                fi
+              fi
+            done < <(git status --porcelain | grep -v "^D" | cut -c4-)
+          
+            # 변경사항 푸시
+            git push origin main || git push -u origin main
+          else
+            echo "No files to sync"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf temp_b_repo
+          rm -f commit_messages.json
