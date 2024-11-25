@@ -130,5 +130,5 @@ jobs:
           fi
           
           # Commit with the last commit message from A repo
-          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
+          git commit -m "${LAST_COMMIT_MSG}"
           git push origin main
