@@ -22,42 +22,42 @@ jobs:
           git config --global user.name "Hiki's GitHub Actions Bot"
           git config --global user.email "wsx0239@gmail.com"
 
-      # Step 3: Calculate current year, month, and week (기존 로직 유지)
+      # Step 3: Calculate current year, month, and week (기존 로직 수정)
       - name: Determine current year, month, and week of the month
         id: date
         run: |
-          TODAY="2024-11-24"  # 기준일 설정
+          TODAY=$(date +"%Y-%m-%d")
           YEAR=$(date -d "$TODAY" +"%Y")
           MONTH=$(date -d "$TODAY" +"%m")
           DAY=$(date -d "$TODAY" +"%d")
+
+          # 현재 날짜의 주의 시작일 (일요일 기준)
+          START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u) days" +"%Y-%m-%d")
           
-          # 해당 월의 1일을 기준으로 주차 계산
-          FIRST_OF_MONTH="${YEAR}-${MONTH}-01"
-          FIRST_DAY_OF_WEEK=$(date -d "$FIRST_OF_MONTH" +%u)  # 1일이 무슨 요일인지 구하기 (1=월요일, 7=일요일)
+          # 현재 날짜의 주의 종료일 (토요일 기준)
+          END_OF_WEEK=$(date -d "$START_OF_WEEK +6 days" +"%Y-%m-%d")
 
-          # 1일이 포함된 주의 시작일 (일요일로 설정)
-          if [ "$FIRST_DAY_OF_WEEK" -eq 1 ]; then
-            START_OF_WEEK="${FIRST_OF_MONTH}"
+          # 현재 주간이 해당 월에 속하는지 과반수로 판단
+          START_MONTH=$(date -d "$START_OF_WEEK" +"%m")
+          END_MONTH=$(date -d "$END_OF_WEEK" +"%m")
+
+          # 현재 주간이 걸친 월별 일수 계산
+          DAYS_IN_START_MONTH=$(( ($(date -d "$END_OF_WEEK" +%s) - $(date -d "$START_OF_WEEK" +%s)) / 86400 + 1 ))
+          DAYS_IN_START_MONTH=$(( DAYS_IN_START_MONTH - $(date -d "$END_OF_WEEK" +"%d") + 1 ))
+
+          # 기준 월을 결정
+          if [ "$START_MONTH" = "$MONTH" ] && [ "$DAYS_IN_START_MONTH" -gt 3 ]; then
+            TARGET_MONTH="$START_MONTH"
           else
-            START_OF_WEEK=$(date -d "$FIRST_OF_MONTH - $((FIRST_DAY_OF_WEEK - 1)) days" +"%Y-%m-%d")
+            TARGET_MONTH="$END_MONTH"
           fi
 
-          # 오늘 날짜부터 해당 월의 1일까지 차이 일수를 계산
-          DAYS_SINCE_START_OF_MONTH=$(( ( $(date -d "$TODAY" +%s) - $(date -d "$START_OF_WEEK" +%s) ) / 86400 ))
+          # 기준 월의 첫째 주부터 몇 주 차인지 계산
+          FIRST_DAY_OF_MONTH="${YEAR}-${TARGET_MONTH}-01"
+          DAYS_SINCE_FIRST=$(($(date -d "$TODAY" +%s) - $(date -d "$FIRST_DAY_OF_MONTH" +%s)))
+          WEEK_NUMBER=$(( (DAYS_SINCE_FIRST / 86400) / 7 + 1 ))
 
-          # 주차 계산 (일요일부터 토요일까지 한 주 기준)
-          WEEK_NUMBER=$(( (DAYS_SINCE_START_OF_MONTH) / 7 + 1 ))
-
-          # 해당 월의 마지막 날이 토요일이 아니면, 그 다음날은 Week 1로 설정
-          END_OF_MONTH=$(date -d "$YEAR-$MONTH-01 +1 month -1 day" +"%Y-%m-%d")  # 해당 월의 마지막 날
-          END_OF_MONTH_DAY=$(date -d "$END_OF_MONTH" +"%u")  # 마지막 날이 무슨 요일인지 확인
-
-          # 마지막 날이 토요일이 아니면, 그 다음 날은 새로운 월의 첫 번째 주로 설정
-          if [ "$END_OF_MONTH_DAY" -ne 6 ]; then
-            WEEK_NUMBER=$((WEEK_NUMBER + 1))  # 새로운 월의 첫 번째 주로 설정
-          fi
-
-          DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
+          DIR_NAME="${YEAR}-${TARGET_MONTH}/Week${WEEK_NUMBER}"
           echo "::set-output name=dir_name::${DIR_NAME}"
 
       # Step 4: Prepare files for B repository
