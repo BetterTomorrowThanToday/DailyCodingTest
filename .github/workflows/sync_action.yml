@@ -86,7 +86,7 @@ jobs:
       - name: Clone and set up B repository
         run: |
           # B 레포지토리 클론
-          git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo || {
+          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo || {
             # 클론 실패 시 새 레포지토리 초기화
             mkdir b_repo
             cd b_repo
