@@ -55,8 +55,9 @@ jobs:
               FIRST_DAY="${YEAR}-${MONTH}-01"
               FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY" +"%u")
           
+              REMAINDER=$((FIRST_DAY_WEEKDAY % 7))
               # 주차 계산
-              if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
+              if [ "REMAINDER" -lt 4 ]; then
                 BASE_WEEK=1
               else
                 BASE_WEEK=0
@@ -64,8 +65,13 @@ jobs:
           
               # 해당 날짜의 주차 계산
               DAY_OF_MONTH=$(date -d "$COMMIT_DATE" +%d)
-              ADJUSTED_DAY=$((DAY_OF_MONTH - 1))
-              WEEK_NUMBER=$(( (ADJUSTED_DAY + FIRST_DAY_WEEKDAY - 1) / 7 + BASE_WEEK ))
+              WEEK_NUMBER=$(( (DAY_OF_MONTH + REMAINDER - 2) / 7 + BASE_WEEK ))
+              
+              #log
+              echo "WEEK_NUMBER : $WEEK_NUMBER"
+              echo "REMAINDER : $REMAINDER"
+              echo "BASE_WEEK : $BASE_WEEK"
+          
           
               # B 레포지토리의 대상 경로 생성
               TARGET_DIR="temp_b_repo/${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
