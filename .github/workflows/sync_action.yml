@@ -58,7 +58,7 @@ jobs:
           
               REMAINDER=$((FIRST_DAY_WEEKDAY % 7))
               # 주차 계산
-              if [ "REMAINDER" -lt 4 ]; then
+              if [ "$REMAINDER" -lt 4 ]; then
                 BASE_WEEK=1
               else
                 BASE_WEEK=0
