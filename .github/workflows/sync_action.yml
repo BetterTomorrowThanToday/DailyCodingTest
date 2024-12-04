@@ -54,6 +54,7 @@ jobs:
               # 해당 월의 첫 날 요일 계산 (1=월요일, 7=일요일)
               FIRST_DAY="${YEAR}-${MONTH}-01"
               FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY" +"%u")
+              echo "FIRST_DAY_WEEKDAY : $FIRST_DAY_WEEKDAY"
           
               REMAINDER=$((FIRST_DAY_WEEKDAY % 7))
               # 주차 계산
